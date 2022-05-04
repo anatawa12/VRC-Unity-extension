@@ -21,7 +21,7 @@ namespace anatawa12.BoneFixer.Editor
         // if keep object
         private List<(string name, int idx, bool keep)> removed = new List<(string, int, bool)>();
         // if the value is null, 
-        private List<(string name, int idx, Transform bone)> mapping = new List<(string, int, Transform)>();
+        private List<(string name, Transform bone)> mapping = new List<(string, Transform)>();
         private Vector2 _boneListScrollPosition = Vector2.zero;
 
         [MenuItem("anatawa12/BoneFixer")]
@@ -73,7 +73,8 @@ namespace anatawa12.BoneFixer.Editor
 
                 if (removed.Count != 0)
                 {
-                    EditorGUILayout.LabelField("removing bones: ");
+                    EditorGUILayout.LabelField("there's removed bones");
+                    EditorGUILayout.LabelField("check to keep GameObject");
                     for (int i = 0; i < removed.Count; i++)
                     {
                         var tuple = removed[i];
@@ -103,7 +104,7 @@ namespace anatawa12.BoneFixer.Editor
             }
         }
 
-        private static (List<(string, int, bool)>, List<(string, int, Transform)>) FindRemovedAdded(
+        private static (List<(string, int, bool)>, List<(string, Transform)>) FindRemovedAdded(
             SkinnedMeshRenderer broken, SkinnedMeshRenderer model)
         {
             var fixBones = ToDictionary(broken.bones.Select((x, i) => (x.gameObject.name, i)),
@@ -116,13 +117,10 @@ namespace anatawa12.BoneFixer.Editor
                     .OrderBy(e => e.Key)
                     .Select(e => (e.Key, e.Value, false))
                     .ToList(),
-                model.bones.Select((modelBone, i) =>
+                model.bones.Select(modelBone =>
                 {
                     var name = modelBone.gameObject.name;
-                    if (fixBones.TryGetValue(name, out var fixBoneIdx))
-                        return (name, i, broken.bones[fixBoneIdx]);
-                    else
-                        return (name, i, null);
+                    return (name, fixBones.TryGetValue(name, out var fixBoneIdx) ? broken.bones[fixBoneIdx] : null);
                 }).ToList()
             );
         }
@@ -154,46 +152,39 @@ namespace anatawa12.BoneFixer.Editor
                 Destroy(bone.gameObject);
             }
 
-            var bonesMap = fixBones
-                .Where(e => modelBones.ContainsKey(e.Key))
-                .ToDictionary(e => e.Key, e => broken.bones[e.Value]);
+            var bonesMap = mapping.ToDictionary(e => e.name, e => e.bone);
 
             // add bones
-            while (mapping.Count != 0)
+            bool thereIsNull;
+            do
             {
-                foreach (var pair in mapping)
+                thereIsNull = false;
+
+                for (int i = 0; i < mapping.Count; i++)
                 {
-                    Transform newBone;
-                    if (pair.bone != null)
+                    // ReSharper disable once LocalVariableHidesMember
+                    var (name, bone) = mapping[i];
+                    if (bone == null)
                     {
-                        newBone = pair.bone;
-                    }
-                    else
-                    {
-                        var modelBone = model.bones[pair.idx];
-                        if (!bonesMap.TryGetValue(modelBone.parent.gameObject.name, out var newParent)) continue;
-                        newBone = new GameObject(pair.name).transform;
+                        var modelBone = model.bones[i];
+                        if (!bonesMap.TryGetValue(modelBone.parent.gameObject.name, out var newParent))
+                        {
+                            thereIsNull = true;
+                            continue;
+                        }
+
+                        var newBone = new GameObject(name).transform;
                         newBone.SetParent(newParent, false);
                         newBone.localPosition = modelBone.localPosition;
                         newBone.localScale = modelBone.localScale;
                         newBone.localRotation = modelBone.localRotation;
+                        mapping[i] = (name, newBone);
                     }
-
-                    bonesMap[pair.name] = newBone;
-                    mapping.Remove(pair);
-                    break;
                 }
-            }
+            } while (thereIsNull);
 
             // rearrange bones
-            var newBoneArray = new Transform[model.bones.Length];
-
-            for (int i = 0; i < newBoneArray.Length; i++)
-            {
-                newBoneArray[i] = bonesMap[model.bones[i].name];
-            }
-
-            broken.bones = newBoneArray;
+            broken.bones = mapping.Select(x => x.bone).ToArray();
 
             EditorUtility.SetDirty(broken);
 
