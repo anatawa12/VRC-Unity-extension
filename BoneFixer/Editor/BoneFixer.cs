@@ -119,8 +119,10 @@ namespace anatawa12.BoneFixer.Editor
                 model.bones.Select((modelBone, i) =>
                 {
                     var name = modelBone.gameObject.name;
-                    fixBones.TryGetValue(name, out var fixBoneIdx);
-                    return (name, i, broken.bones[fixBoneIdx]);
+                    if (fixBones.TryGetValue(name, out var fixBoneIdx))
+                        return (name, i, broken.bones[fixBoneIdx]);
+                    else
+                        return (name, i, null);
                 }).ToList()
             );
         }
