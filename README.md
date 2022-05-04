@@ -1,4 +1,4 @@
-﻿# anatawa12's Unity extension for VRChat
+# anatawa12's Unity extension for VRChat
 
 ## How To Install
 

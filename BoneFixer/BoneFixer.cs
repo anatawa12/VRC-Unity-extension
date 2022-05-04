@@ -1,4 +1,4 @@
-﻿/* 
+/* 
  * Copyright (c) anatawa12 2022 All Rights Reserved.
  * This file is published under MIT License.
  * See https://opensource.org/licenses/MIT for full license code.
