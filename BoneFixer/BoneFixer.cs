@@ -11,6 +11,7 @@ using System.Linq;
 using JetBrains.Annotations;
 using UnityEditor;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace anatawa12.BoneFixer.Editor
 {
@@ -107,8 +108,7 @@ namespace anatawa12.BoneFixer.Editor
         private static (List<(string, int, bool)>, List<(string, Transform)>) FindRemovedAdded(
             SkinnedMeshRenderer broken, SkinnedMeshRenderer model)
         {
-            var fixBones = ToDictionary(broken.bones.Select((x, i) => (x.gameObject.name, i)),
-                name => throw new FixException($"name of bones of broken duplicated: {name}"));
+            var fixBones = BoneIndicesMap(broken.bones, "broken");
             var modelBones = new HashSet<string>(model.bones.Select((x, i) => x.gameObject.name));
 
             return (
@@ -125,13 +125,20 @@ namespace anatawa12.BoneFixer.Editor
             );
         }
 
+        private static Dictionary<string, int> BoneIndicesMap(Transform[] bones, string of)
+        {
+            return ToDictionary(bones
+                    .Select((x, i) => (x, i))
+                    .Where(x => x.x != null)
+                    .Select(x => (x.x.gameObject.name, x.i)),
+                name => throw new FixException($"name of bones of {of} duplicated: {name}"));
+        }
+
         // ReSharper disable ParameterHidesMember
         private bool DoFix(SkinnedMeshRenderer broken, SkinnedMeshRenderer model)
         {
-            var fixBones = ToDictionary(broken.bones.Select((x, i) => (x.gameObject.name, i)),
-                name => throw new FixException($"name of bones of broken duplicated: {name}"));
-            var modelBones = ToDictionary(model.bones.Select((x, i) => (x.gameObject.name, i)),
-                name => throw new FixException($"name of bones of broken duplicated: {name}"));
+            var fixBones = BoneIndicesMap(broken.bones, "broken");
+            var modelBones = BoneIndicesMap(model.bones, "model");
             // ReSharper restore ParameterHidesMember
 
             // bones names and arranging is same: nop
