@@ -46,12 +46,16 @@ namespace anatawa12.BoneFixer.Editor
             public readonly string Name;
             [CanBeNull]
             public Transform Bone;
+            [CanBeNull] private readonly Transform _initialBone;
 
             public MappingBone([NotNull] string name, [CanBeNull] Transform bone)
             {
                 Name = name;
                 Bone = bone;
+                _initialBone = bone;
             }
+
+            public bool Changed => _initialBone != Bone;
         }
 
         [MenuItem("anatawa12/BoneFixer")]
@@ -92,11 +96,15 @@ namespace anatawa12.BoneFixer.Editor
                 if (mapping.Count != 0)
                 {
                     EditorGUILayout.LabelField("mapping bones: ");
+                    var defaultColor = EditorStyles.label.normal.textColor;
                     foreach (var mappingBone in mapping)
                     {
+                        EditorStyles.label.normal.textColor = mappingBone.Changed ? new Color(0.2f, 0.75f, 0.9f) : defaultColor;
                         mappingBone.Bone =
                             (Transform)EditorGUILayout.ObjectField(mappingBone.Name, mappingBone.Bone, typeof(Transform), true);
                     }
+
+                    EditorStyles.label.normal.textColor = defaultColor;
                 }
 
                 if (removed.Count != 0)
