@@ -159,7 +159,9 @@ namespace anatawa12.BoneFixer.Editor
                 Destroy(bone.gameObject);
             }
 
-            var bonesMap = mapping.ToDictionary(e => e.name, e => e.bone);
+            var bonesMap = mapping
+                .Where(e => e.bone != null)
+                .ToDictionary(e => e.name, e => e.bone);
 
             // add bones
             bool thereIsNull;
@@ -186,6 +188,7 @@ namespace anatawa12.BoneFixer.Editor
                         newBone.localScale = modelBone.localScale;
                         newBone.localRotation = modelBone.localRotation;
                         mapping[i] = (name, newBone);
+                        bonesMap[name] = newBone;
                     }
                 }
             } while (thereIsNull);
