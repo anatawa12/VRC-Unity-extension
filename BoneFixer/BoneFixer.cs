@@ -94,8 +94,14 @@ namespace anatawa12.BoneFixer.Editor
                 {
                     try
                     {
+                        Undo.IncrementCurrentGroup();
+                        Undo.SetCurrentGroupName("BoneFixer");
+                        int undoIndex = Undo.GetCurrentGroup();
+                        
                         if (DoFix(broken, model))
                             EditorUtility.DisplayDialog("succeed", "Fixing bones succeed!", "OK");
+
+                        Undo.CollapseUndoOperations(undoIndex);
                     }
                     catch (FixException e)
                     {
@@ -153,10 +159,11 @@ namespace anatawa12.BoneFixer.Editor
                 {
                     // world location will be kept automatically so What this need to do is
                     // moving child bone to parent of removing bone
-                    bone.GetChild(0).SetParent(bone.parent);
+                    Undo.SetTransformParent(bone.GetChild(0), bone.parent, 
+                        $"move child object of {bone.gameObject.name} to its parent");
                 }
 
-                Destroy(bone.gameObject);
+                Undo.DestroyObjectImmediate(bone.gameObject);
             }
 
             var bonesMap = mapping
@@ -187,6 +194,7 @@ namespace anatawa12.BoneFixer.Editor
                         newBone.localPosition = modelBone.localPosition;
                         newBone.localScale = modelBone.localScale;
                         newBone.localRotation = modelBone.localRotation;
+                        Undo.RegisterCreatedObjectUndo(newBone.gameObject, $"create bone {name}");
                         mapping[i] = (name, newBone);
                         bonesMap[name] = newBone;
                     }
@@ -194,6 +202,7 @@ namespace anatawa12.BoneFixer.Editor
             } while (thereIsNull);
 
             // rearrange bones
+            Undo.RecordObject(broken, "update bones of SkinnedMeshRenderer");
             broken.bones = mapping.Select(x => x.bone).ToArray();
 
             EditorUtility.SetDirty(broken);
