@@ -20,10 +20,39 @@ namespace anatawa12.BoneFixer.Editor
         [CanBeNull] private SkinnedMeshRenderer broken;
         [CanBeNull] private SkinnedMeshRenderer model;
         // if keep object
-        private List<(string name, int idx, bool keep)> removed = new List<(string, int, bool)>();
+        private List<RemovedBone> removed = new List<RemovedBone>();
         // if the value is null, 
-        private List<(string name, Transform bone)> mapping = new List<(string, Transform)>();
+        private List<MappingBone> mapping = new List<MappingBone>();
         private Vector2 _boneListScrollPosition = Vector2.zero;
+
+        private class RemovedBone
+        {
+            [NotNull]
+            public readonly string Name;
+            public readonly int Index;
+            public bool Keep;
+
+            public RemovedBone([NotNull] string name, int index)
+            {
+                Name = name;
+                Index = index;
+                Keep = false;
+            }
+        }
+
+        private class MappingBone
+        {
+            [NotNull]
+            public readonly string Name;
+            [CanBeNull]
+            public Transform Bone;
+
+            public MappingBone([NotNull] string name, [CanBeNull] Transform bone)
+            {
+                Name = name;
+                Bone = bone;
+            }
+        }
 
         [MenuItem("anatawa12/BoneFixer")]
         public static void ShowWindow()
@@ -63,12 +92,10 @@ namespace anatawa12.BoneFixer.Editor
                 if (mapping.Count != 0)
                 {
                     EditorGUILayout.LabelField("mapping bones: ");
-                    for (int i = 0; i < mapping.Count; i++)
+                    foreach (var mappingBone in mapping)
                     {
-                        var tuple = mapping[i];
-                        tuple.bone =
-                            (Transform)EditorGUILayout.ObjectField(tuple.name, tuple.bone, typeof(Transform), true);
-                        mapping[i] = tuple;
+                        mappingBone.Bone =
+                            (Transform)EditorGUILayout.ObjectField(mappingBone.Name, mappingBone.Bone, typeof(Transform), true);
                     }
                 }
 
@@ -76,11 +103,9 @@ namespace anatawa12.BoneFixer.Editor
                 {
                     EditorGUILayout.LabelField("there's removed bones");
                     EditorGUILayout.LabelField("check to keep GameObject");
-                    for (int i = 0; i < removed.Count; i++)
+                    foreach (var removedBone in removed)
                     {
-                        var tuple = removed[i];
-                        tuple.keep = EditorGUILayout.Toggle(tuple.name, tuple.keep);
-                        removed[i] = tuple;
+                        removedBone.Keep = EditorGUILayout.Toggle(removedBone.Name, removedBone.Keep);
                     }
                 }
 
@@ -111,7 +136,7 @@ namespace anatawa12.BoneFixer.Editor
             }
         }
 
-        private static (List<(string, int, bool)>, List<(string, Transform)>) FindRemovedAdded(
+        private static (List<RemovedBone>, List<MappingBone>) FindRemovedAdded(
             SkinnedMeshRenderer broken, SkinnedMeshRenderer model)
         {
             var fixBones = BoneIndicesMap(broken.bones, "broken");
@@ -121,12 +146,13 @@ namespace anatawa12.BoneFixer.Editor
                 fixBones
                     .Where(e => !modelBones.Contains(e.Key))
                     .OrderBy(e => e.Key)
-                    .Select(e => (e.Key, e.Value, false))
+                    .Select(e => new RemovedBone(e.Key, e.Value))
                     .ToList(),
                 model.bones.Select(modelBone =>
                 {
                     var name = modelBone.gameObject.name;
-                    return (name, fixBones.TryGetValue(name, out var fixBoneIdx) ? broken.bones[fixBoneIdx] : null);
+                    return new MappingBone(name, fixBones.TryGetValue(name, out var fixBoneIdx)
+                        ? broken.bones[fixBoneIdx] : null);
                 }).ToList()
             );
         }
@@ -153,8 +179,8 @@ namespace anatawa12.BoneFixer.Editor
             // remove bones
             foreach (var pair in removed)
             {
-                if (pair.keep) continue;
-                var bone = broken.bones[pair.idx];
+                if (pair.Keep) continue;
+                var bone = broken.bones[pair.Index];
                 while (bone.childCount > 0)
                 {
                     // world location will be kept automatically so What this need to do is
@@ -167,8 +193,8 @@ namespace anatawa12.BoneFixer.Editor
             }
 
             var bonesMap = mapping
-                .Where(e => e.bone != null)
-                .ToDictionary(e => e.name, e => e.bone);
+                .Where(e => e.Bone != null)
+                .ToDictionary(e => e.Name, e => e.Bone);
 
             // add bones
             bool thereIsNull;
@@ -178,9 +204,8 @@ namespace anatawa12.BoneFixer.Editor
 
                 for (int i = 0; i < mapping.Count; i++)
                 {
-                    // ReSharper disable once LocalVariableHidesMember
-                    var (name, bone) = mapping[i];
-                    if (bone == null)
+                    var mappingBone = mapping[i];
+                    if (mappingBone.Bone == null)
                     {
                         var modelBone = model.bones[i];
                         if (!bonesMap.TryGetValue(modelBone.parent.gameObject.name, out var newParent))
@@ -195,15 +220,14 @@ namespace anatawa12.BoneFixer.Editor
                         newBone.localScale = modelBone.localScale;
                         newBone.localRotation = modelBone.localRotation;
                         Undo.RegisterCreatedObjectUndo(newBone.gameObject, $"create bone {name}");
-                        mapping[i] = (name, newBone);
-                        bonesMap[name] = newBone;
+                        mappingBone.Bone = bonesMap[name] = newBone;
                     }
                 }
             } while (thereIsNull);
 
             // rearrange bones
             Undo.RecordObject(broken, "update bones of SkinnedMeshRenderer");
-            broken.bones = mapping.Select(x => x.bone).ToArray();
+            broken.bones = mapping.Select(x => x.Bone).ToArray();
 
             EditorUtility.SetDirty(broken);
 
