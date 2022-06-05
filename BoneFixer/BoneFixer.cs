@@ -222,13 +222,13 @@ namespace anatawa12.BoneFixer.Editor
                             continue;
                         }
 
-                        var newBone = new GameObject(name).transform;
+                        var newBone = new GameObject(mappingBone.Name).transform;
                         newBone.SetParent(newParent, false);
                         newBone.localPosition = modelBone.localPosition;
                         newBone.localScale = modelBone.localScale;
                         newBone.localRotation = modelBone.localRotation;
-                        Undo.RegisterCreatedObjectUndo(newBone.gameObject, $"create bone {name}");
-                        mappingBone.Bone = bonesMap[name] = newBone;
+                        Undo.RegisterCreatedObjectUndo(newBone.gameObject, $"create bone {mappingBone.Name}");
+                        mappingBone.Bone = bonesMap[mappingBone.Name] = newBone;
                     }
                 }
             } while (thereIsNull);
