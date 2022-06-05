@@ -189,6 +189,8 @@ namespace anatawa12.BoneFixer.Editor
             {
                 if (pair.Keep) continue;
                 var bone = broken.bones[pair.Index];
+                if (bone == null) continue;
+
                 while (bone.childCount > 0)
                 {
                     // world location will be kept automatically so What this need to do is
