@@ -24,6 +24,7 @@ namespace anatawa12.BoneFixer.Editor
         // if the value is null, 
         private List<MappingBone> mapping = new List<MappingBone>();
         private Vector2 _boneListScrollPosition = Vector2.zero;
+        private bool _fixAll;
 
         private class RemovedBone
         {
@@ -46,6 +47,7 @@ namespace anatawa12.BoneFixer.Editor
             public readonly string Name;
             [CanBeNull]
             public Transform Bone;
+            public bool PositionFix;
             [CanBeNull] private readonly Transform _initialBone;
 
             public MappingBone([NotNull] string name, [CanBeNull] Transform bone)
@@ -95,13 +97,38 @@ namespace anatawa12.BoneFixer.Editor
                 _boneListScrollPosition = EditorGUILayout.BeginScrollView(_boneListScrollPosition);
                 if (mapping.Count != 0)
                 {
-                    EditorGUILayout.LabelField("mapping bones: ");
+                    var w1= Screen.width / 6;
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Label("mapping bones: ", GUILayout.Width(w1 * 2));
+                    _fixAll = GUILayout.Toggle(_fixAll, "fix all");
+                    GUILayout.EndHorizontal();
+
                     var defaultColor = EditorStyles.label.normal.textColor;
                     foreach (var mappingBone in mapping)
                     {
                         EditorStyles.label.normal.textColor = mappingBone.Changed ? new Color(0.2f, 0.75f, 0.9f) : defaultColor;
+                        GUILayout.BeginHorizontal();
+                        GUILayout.Label(mappingBone.Name, GUILayout.Width(w1));
                         mappingBone.Bone =
-                            (Transform)EditorGUILayout.ObjectField(mappingBone.Name, mappingBone.Bone, typeof(Transform), true);
+                            (Transform)EditorGUILayout.ObjectField("", mappingBone.Bone, typeof(Transform), true,
+                                GUILayout.Width(w1));
+                        if (_fixAll)
+                        {
+                            EditorGUI.BeginDisabledGroup(true);
+                            GUILayout.Toggle(true, "position fix",
+                                GUILayout.Width(w1));
+                            EditorGUI.EndDisabledGroup();
+                        }
+                        else
+                        {
+                            EditorGUI.BeginDisabledGroup(mappingBone.Bone == null);
+                            mappingBone.PositionFix = GUILayout.Toggle(
+                                mappingBone.PositionFix || mappingBone.Bone == null, "position fix",
+                                    GUILayout.Width(w1));
+                            EditorGUI.EndDisabledGroup();
+                        }
+
+                        GUILayout.EndHorizontal();
                     }
 
                     EditorStyles.label.normal.textColor = defaultColor;
@@ -177,6 +204,9 @@ namespace anatawa12.BoneFixer.Editor
         // ReSharper disable ParameterHidesMember
         private bool DoFix(SkinnedMeshRenderer broken, SkinnedMeshRenderer model)
         {
+            if (_fixAll)
+                mapping.ForEach(v => v.PositionFix = true);
+
             var fixBones = BoneIndicesMap(broken.bones, "broken");
             var modelBones = BoneIndicesMap(model.bones, "model");
             // ReSharper restore ParameterHidesMember
@@ -207,10 +237,10 @@ namespace anatawa12.BoneFixer.Editor
                 .ToDictionary(e => e.Name, e => e.Bone);
 
             // add bones
-            bool thereIsNull;
+            bool continued;
             do
             {
-                thereIsNull = false;
+                continued = false;
 
                 for (int i = 0; i < mapping.Count; i++)
                 {
@@ -220,7 +250,7 @@ namespace anatawa12.BoneFixer.Editor
                         var modelBone = model.bones[i];
                         if (!bonesMap.TryGetValue(modelBone.parent.gameObject.name, out var newParent))
                         {
-                            thereIsNull = true;
+                            continued = true;
                             continue;
                         }
 
@@ -231,9 +261,47 @@ namespace anatawa12.BoneFixer.Editor
                         newBone.localRotation = modelBone.localRotation;
                         Undo.RegisterCreatedObjectUndo(newBone.gameObject, $"create bone {mappingBone.Name}");
                         mappingBone.Bone = bonesMap[mappingBone.Name] = newBone;
+                        mappingBone.PositionFix = false;
+                    }
+                    else if (mappingBone.PositionFix)
+                    {
+                        var bones = model.bones;
+                        var modelBone = bones[i];
+                        var parentIdx = Array.IndexOf(bones, modelBone.parent);
+                        if (parentIdx == -1)
+                            throw new InvalidOperationException("PositionFix of Root Bone");
+                        //parentIdx;
+                        var newParent = mapping[parentIdx];
+                        if (newParent.PositionFix)
+                        {
+                            continued = true;
+                            continue;
+                        }
+                        var newParentBone = newParent.Bone;
+                        var bone = mappingBone.Bone;
+
+                        if (newParentBone == bone.parent)
+                        {
+                            // fast path: copy local rotation
+                            bone.localRotation = modelBone.localRotation;
+                            bone.localPosition = modelBone.localPosition;
+                        }
+                        else
+                        {
+                            Transform go = new GameObject("dummy").transform;
+                            go.parent = newParentBone;
+                            go.localRotation = modelBone.localRotation;
+                            go.localPosition = modelBone.localPosition;
+                            bone.SetPositionAndRotation(go.position, go.rotation);
+                            DestroyImmediate(go.gameObject);
+                        }
+
+                        // mapping[i]
+                        Undo.RecordObject(mappingBone.Bone, $"fix position of {mappingBone.Name}");
+                        mappingBone.PositionFix = false;
                     }
                 }
-            } while (thereIsNull);
+            } while (continued);
 
             // rearrange bones
             Undo.RecordObject(broken, "update bones of SkinnedMeshRenderer");
